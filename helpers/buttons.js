@@ -1,48 +1,11 @@
 /**
- * Enhanced wrapper utilities to enable WhiskeySockets (Baileys fork) to send
- * WhatsApp interactive buttons / native flow messages reliably.
- *
- * Context / Rationale:
- *  - Upstream WhiskeySockets currently lacks high‑level helpers for the new
- *    interactive / native flow button format ("interactiveMessage.nativeFlowMessage").
- *  - The regular sendMessage path performs media/content validation that does
- *    not yet recognize interactiveMessage which causes button payloads to fail.
- *  - We bypass that by constructing the message with generateWAMessageFromContent
- *    and calling relayMessage directly while injecting the correct binary nodes
- *    ("biz", "interactive", optional "bot") that the official client emits.
- *
- * What this file offers:
- *  1. Normalization helpers to accept multiple legacy button shapes and map
- *     them into the current native_flow button structure.
- *  2. Logic to detect which button / list type is being sent.
- *  3. Functions to derive the binary node tree WhatsApp expects (getButtonArgs).
- *  4. A safe public helper (sendInteractiveButtonsBasic) for common quick‑reply usage.
- *  5. A lower level power function (sendInteractiveMessage) for full control.
- *
- * Usage (minimal):
- *  const { sendInteractiveButtonsBasic } = require('./buttons-wrapper');
- *  await sendInteractiveButtonsBasic(sock, jid, {
- *    text: 'Choose an option',
- *    footer: 'Footer text',
- *    buttons: [ { id: 'opt1', text: 'Option 1' }, { id: 'opt2', text: 'Option 2' } ]
- *  });
- *
- * All functions are pure / side‑effect free except sendInteractiveMessage which
- * performs network I/O via relayMessage.
+ * ESM version of buttons-wrapper (converted from CommonJS)
+ * See original header and rationale in the user's CJS file.
  */
 
 /**
  * Normalize various historical / upstream button shapes into the
  * native_flow "buttons" entry (array of { name, buttonParamsJson }).
- *
- * Accepted input shapes (examples):
- *  1. Already native_flow: { name: 'quick_reply', buttonParamsJson: '{...}' }
- *  2. Simple legacy:       { id: 'id1', text: 'My Button' }
- *  3. Old Baileys shape:   { buttonId: 'id1', buttonText: { displayText: 'My Button' } }
- *  4. Any other object is passed through verbatim (caller responsibility).
- *
- * @param {Array<object>} [buttons=[]] Input raw buttons.
- * @returns {Array<object>} Array where each item has at minimum { name, buttonParamsJson }.
  */
 export function buildInteractiveButtons(buttons = []) {
   return buttons.map((b, i) => {
@@ -71,25 +34,13 @@ export function buildInteractiveButtons(buttons = []) {
       };
     }
 
-    // 4. Unknown shape: do not transform (keeps openness for future kinds)
+    // 4. Unknown shape: do not transform
     return b;
   });
 }
 
 /**
  * Validate authoring-time button objects prior to conversion.
- * Accepts the liberal set of historical shapes supported by buildInteractiveButtons.
- * Returns an object with arrays of errors & warnings plus a possibly auto-fixed list.
- * Validation is intentionally permissive: it only blocks clearly malformed input.
- *
- * Allowed shapes per item:
- *  1. Native: { name: string, buttonParamsJson: string(JSON) }
- *  2. Legacy: { id: string, text?: string } OR { text: string }
- *  3. Old Baileys: { buttonId: string, buttonText: { displayText: string } }
- *  4. Any object containing buttonParamsJson that is valid JSON (passes through)
- *
- * @param {Array<object>} buttons Raw user supplied buttons value.
- * @returns {{errors: string[], warnings: string[], valid: boolean, cleaned: Array<object>}}
  */
 export function validateAuthoringButtons(buttons) {
   const errors = [];
@@ -101,7 +52,6 @@ export function validateAuthoringButtons(buttons) {
     errors.push('buttons must be an array');
     return { errors, warnings, valid: false, cleaned: [] };
   }
-  // WhatsApp quick replies historically limited (e.g. 3) but native flow may allow more; set generous soft cap.
   const SOFT_BUTTON_CAP = 25;
   if (buttons.length === 0) {
     warnings.push('buttons array is empty');
@@ -165,12 +115,6 @@ export function validateAuthoringButtons(buttons) {
 }
 
 // -------------------- ERROR UTILITIES / USER-FRIENDLY FEEDBACK --------------------
-/**
- * Custom validation error for interactive messaging helpers.
- * Provides rich structured detail (errors, warnings, example) so callers can
- * surface actionable feedback to end users / logs. The message property remains
- * concise while detailed arrays are attached to the instance and serializable via toJSON.
- */
 export class InteractiveValidationError extends Error {
   /**
    * @param {string} message High level summary.
@@ -194,10 +138,6 @@ export class InteractiveValidationError extends Error {
       example: this.example
     };
   }
-  /**
-   * Produce a verbose multiline string (for console) describing the problem.
-   * @returns {string}
-   */
   formatDetailed() {
     const lines = [
       `[${this.name}] ${this.message}${this.context ? ' (' + this.context + ')' : ''}`
@@ -217,7 +157,6 @@ export class InteractiveValidationError extends Error {
   }
 }
 
-// Canonical minimal examples to include inside thrown InteractiveValidationError objects.
 const EXAMPLE_PAYLOADS = {
   sendButtons: {
     text: 'Choose an option',
@@ -239,16 +178,13 @@ const EXAMPLE_PAYLOADS = {
 };
 
 // -------------------- STRICT FORMAT VALIDATORS (User Spec) --------------------
-// Allowed complex button names for sendButtons (legacy quick reply + these cta_* types)
 const SEND_BUTTONS_ALLOWED_COMPLEX = new Set(['cta_url', 'cta_copy', 'cta_call']);
-// Allowed button names for sendInteractiveMessage (expanded set)
 const INTERACTIVE_ALLOWED_NAMES = new Set([
   'quick_reply', 'cta_url', 'cta_copy', 'cta_call', 'cta_catalog', 'cta_reminder', 'cta_cancel_reminder',
   'address_message', 'send_location', 'open_webview', 'mpm', 'wa_payment_transaction_details',
   'automated_greeting_message_view_catalog', 'galaxy_message', 'single_select'
 ]);
 
-// Required JSON fields per button name (minimal mandatory keys)
 const REQUIRED_FIELDS_MAP = {
   cta_url: ['display_text', 'url'],
   cta_copy: ['display_text', 'copy_code'],
@@ -258,7 +194,7 @@ const REQUIRED_FIELDS_MAP = {
   cta_cancel_reminder: ['display_text'],
   address_message: ['display_text'],
   send_location: ['display_text'],
-  open_webview: ['title', 'link'], // link further validated
+  open_webview: ['title', 'link'],
   mpm: ['product_id'],
   wa_payment_transaction_details: ['transaction_id'],
   automated_greeting_message_view_catalog: ['business_phone_number', 'catalog_product_id'],
@@ -267,7 +203,7 @@ const REQUIRED_FIELDS_MAP = {
   quick_reply: ['display_text', 'id']
 };
 
-export function parseButtonParams(name, buttonParamsJson, errors, warnings, index) {
+function parseButtonParams(name, buttonParamsJson, errors, warnings, index) {
   let parsed;
   try {
     parsed = JSON.parse(buttonParamsJson);
@@ -281,7 +217,6 @@ export function parseButtonParams(name, buttonParamsJson, errors, warnings, inde
       errors.push(`button[${index}] (${name}) missing required field '${f}'`);
     }
   }
-  // Additional nested validation
   if (name === 'open_webview' && parsed.link) {
     if (typeof parsed.link !== 'object' || !parsed.link.url) {
       errors.push(`button[${index}] (open_webview) link.url required`);
@@ -297,10 +232,6 @@ export function parseButtonParams(name, buttonParamsJson, errors, warnings, inde
 
 /**
  * Strict validator for sendButtons input per user specification.
- * Format: { text: string, buttons: [...] , optional title/subtitle/footer }
- * Allowed button shapes:
- *   1. Legacy quick reply: { id, text }
- *   2. Named buttons: name in SEND_BUTTONS_ALLOWED_COMPLEX with valid buttonParamsJson & required fields
  */
 export function validateSendButtonsPayload(data) {
   const errors = [];
@@ -319,7 +250,6 @@ export function validateSendButtonsPayload(data) {
         errors.push(`button[${i}] must be an object`);
         return;
       }
-      // Legacy quick reply
       if (btn.id && btn.text) {
         if (typeof btn.id !== 'string' || typeof btn.text !== 'string') {
           errors.push(`button[${i}] legacy quick reply id/text must be strings`);
@@ -346,7 +276,6 @@ export function validateSendButtonsPayload(data) {
 
 /**
  * Strict validator for sendInteractiveMessage authoring payload (before conversion).
- * Expected: { text: string, interactiveButtons: [ { name, buttonParamsJson } ... ], optional title/subtitle/footer }
  */
 export function validateSendInteractiveMessagePayload(data) {
   const errors = [];
@@ -385,11 +314,6 @@ export function validateSendInteractiveMessagePayload(data) {
 
 /**
  * Validate top-level interactive content just before WAMessage creation.
- * Ensures that if interactiveButtons OR interactiveMessage.nativeFlowMessage is present,
- * the internal button array meets minimal structural requirements.
- *
- * @param {object} content Converted content (after optional convertToInteractiveMessage call).
- * @returns {{errors: string[], warnings: string[], valid: boolean}}
  */
 export function validateInteractiveMessageContent(content) {
   const errors = [];
@@ -399,7 +323,6 @@ export function validateInteractiveMessageContent(content) {
   }
   const interactive = content.interactiveMessage;
   if (!interactive) {
-    // Non-interactive messages are acceptable; nothing to validate.
     return { errors, warnings, valid: true };
   }
   const nativeFlow = interactive.nativeFlowMessage;
@@ -435,15 +358,7 @@ export function validateInteractiveMessageContent(content) {
 }
 
 /**
- * Detects button type from normalized message content
- * Mirrors itsukichan's getButtonType function
- */
-/**
  * Determine which interactive category a normalized message belongs to.
- * (Normalization is performed by Baileys' normalizeMessageContent beforehand.)
- *
- * @param {object} message A message content object (part of WAMessage.message).
- * @returns {'list'|'buttons'|'native_flow'|null} Type identifier or null if not interactive.
  */
 export function getButtonType(message) {
   if (message.listMessage) {
@@ -457,31 +372,18 @@ export function getButtonType(message) {
 }
 
 /**
- * Creates the proper binary node structure for buttons
- * Mirrors itsukichan's getButtonArgs function
- */
-/**
  * Produce the binary node (WABinary-like JSON shape) required for the specific
- * interactive button / list type. Mirrors itsukichan's implementation to stay
- * compatible with observed official client traffic.
- *
- * NOTE: Returning different "v" (version) and "name" values influences how
- * WhatsApp renders & validates flows. The constants here are empirically derived.
- *
- * @param {object} message Normalized message content (after Baileys normalization).
- * @returns {object} A node with shape { tag, attrs, [content] } to inject into additionalNodes.
+ * interactive button / list type.
  */
 export function getButtonArgs(message) {
   const nativeFlow = message.interactiveMessage?.nativeFlowMessage;
   const firstButtonName = nativeFlow?.buttons?.[0]?.name;
-  // Button names having dedicated specialized flow nodes.
   const nativeFlowSpecials = [
     'mpm', 'cta_catalog', 'send_location',
     'call_permission_request', 'wa_payment_transaction_details',
     'automated_greeting_message_view_catalog'
   ];
 
-  // Payment / order flows: attach native_flow_name directly.
   if (nativeFlow && (firstButtonName === 'review_and_pay' || firstButtonName === 'payment_info')) {
     return {
       tag: 'biz',
@@ -490,7 +392,6 @@ export function getButtonArgs(message) {
       }
     };
   } else if (nativeFlow && nativeFlowSpecials.includes(firstButtonName)) {
-    // Specialized native flows (only working for WA original client).
     return {
       tag: 'biz',
       attrs: {},
@@ -510,7 +411,6 @@ export function getButtonArgs(message) {
       }]
     };
   } else if (nativeFlow || message.buttonsMessage) {
-    // Generic / mixed interactive buttons case (works in original + business clients).
     return {
       tag: 'biz',
       attrs: {},
@@ -530,7 +430,6 @@ export function getButtonArgs(message) {
       }]
     };
   } else if (message.listMessage) {
-    // Product list style (listMessage) mapping.
     return {
       tag: 'biz',
       attrs: {},
@@ -543,7 +442,6 @@ export function getButtonArgs(message) {
       }]
     };
   } else {
-    // Non-interactive: still need a basic biz node for consistency.
     return {
       tag: 'biz',
       attrs: {}
@@ -552,24 +450,10 @@ export function getButtonArgs(message) {
 }
 
 /**
- * Converts interactiveButtons format to proper protobuf message structure
- * WhiskeySockets needs interactiveMessage.nativeFlowMessage structure for buttons to work
- */
-/**
- * Transform a temporary high-level shape:
- *  { text, footer, title?, subtitle?, interactiveButtons: [{ name?, buttonParamsJson? | legacy }...] }
- * into the exact structure WhiskeySockets expects in the WAMessage:
- *  { interactiveMessage: { nativeFlowMessage: { buttons: [...] }, header?, body?, footer? } }
- *
- * The original convenience fields are stripped so we do not leak custom keys
- * into generateWAMessageFromContent.
- *
- * @param {object} content High level authoring content.
- * @returns {object} New content object ready for generateWAMessageFromContent.
+ * Transform convenience authoring content into WhiskeySockets' expected interactiveMessage shape.
  */
 export function convertToInteractiveMessage(content) {
   if (content.interactiveButtons && content.interactiveButtons.length > 0) {
-    // Build nativeFlowMessage.buttons array (already normalized earlier).
     const interactiveMessage = {
       nativeFlowMessage: {
         buttons: content.interactiveButtons.map(btn => ({
@@ -579,22 +463,18 @@ export function convertToInteractiveMessage(content) {
       }
     };
 
-    // Optional header.
     if (content.title || content.subtitle) {
       interactiveMessage.header = {
         title: content.title || content.subtitle || ''
       };
     }
-    // Body text.
     if (content.text) {
       interactiveMessage.body = { text: content.text };
     }
-    // Footer.
     if (content.footer) {
       interactiveMessage.footer = { text: content.footer };
     }
 
-    // Strip authoring-only fields to avoid duplications / unexpected serialization.
     const newContent = { ...content };
     delete newContent.interactiveButtons;
     delete newContent.title;
@@ -608,32 +488,15 @@ export function convertToInteractiveMessage(content) {
 }
 
 /**
- * Enhanced sendMessage function for WhiskeySockets that bypasses the internal sendMessage
- * and creates interactiveMessage manually + relayMessage directly like itsukichan does
- * This provides full control over additionalNodes for button functionality
- */
-/**
- * Low‑level power helper that sends any interactive message by:
- *  1. Converting authoring content into interactiveMessage/nativeFlowMessage.
- *  2. Building a WAMessage via generateWAMessageFromContent (skips unsupported validation).
- *  3. Deriving & injecting required binary nodes (biz / interactive / bot) into relayMessage.
+ * Low-level power helper that sends any interactive message. Converted to ESM: uses dynamic import().
  *
- * Responsibility for retries / ack handling remains with the caller, identical to
- * normal Baileys usage.
- *
- * @param {import('./WhiskeySockets')} sock Active Baileys-like socket instance.
- * @param {string} jid Chat JID (individual or group) to send to.
- * @param {object} content High-level message content (may include interactiveButtons).
- * @param {object} [options] Additional Baileys send options (forwarding, status, etc.).
- * @returns {Promise<object>} The constructed full WAMessage object (same shape as sendMessage would resolve to).
- * @throws {Error} If required WhiskeySockets internals are unavailable.
+ * Note: dynamic import is used to attempt to load baileys / whiskeysockets package at runtime.
  */
 export async function sendInteractiveMessage(sock, jid, content, options = {}) {
   if (!sock) {
-  throw new InteractiveValidationError('Socket is required', { context: 'sendInteractiveMessage' });
+    throw new InteractiveValidationError('Socket is required', { context: 'sendInteractiveMessage' });
   }
 
-  // Strict authoring validation if raw interactiveButtons provided (pre-conversion form).
   if (content && Array.isArray(content.interactiveButtons)) {
     const strict = validateSendInteractiveMessagePayload(content);
     if (!strict.valid) {
@@ -647,10 +510,8 @@ export async function sendInteractiveMessage(sock, jid, content, options = {}) {
     if (strict.warnings.length) console.warn('sendInteractiveMessage warnings:', strict.warnings);
   }
 
-  // Step 1: Convert authoring-time interactiveButtons to native_flow structure.
   const convertedContent = convertToInteractiveMessage(content);
 
-  // Step 1a: Validate converted content (interactive portion only).
   const { errors: contentErrors, warnings: contentWarnings, valid: contentValid } = validateInteractiveMessageContent(convertedContent);
   if (!contentValid) {
     throw new InteractiveValidationError('Converted interactive content invalid', {
@@ -661,30 +522,34 @@ export async function sendInteractiveMessage(sock, jid, content, options = {}) {
     });
   }
   if (contentWarnings.length) {
-    // Non-fatal; surface in log for developer insight.
     console.warn('Interactive content warnings:', contentWarnings);
   }
 
-  // Step 2: Obtain needed internal helper functions.
-  let generateWAMessageFromContent, relayMessage, normalizeMessageContent, isJidGroup, generateMessageIDV2;
-  // Attempt to load from installed baileys package (modern WhiskeySockets fork published as 'baileys').
+  // Dynamic import attempt for baileys / whiskeysockets packages.
   const candidatePkgs = ['baileys', '@whiskeysockets/baileys', '@adiwajshing/baileys'];
+  let generateWAMessageFromContent, relayMessage, normalizeMessageContent, isJidGroup, generateMessageIDV2;
   let loaded = false;
+
   for (const pkg of candidatePkgs) {
     if (loaded) break;
     try {
-      const mod = require(pkg);
-      // Newer versions export these helpers at top-level or nested.
+      // dynamic import
+      const ns = await import(pkg);
+      const mod = ns.default || ns;
       generateWAMessageFromContent = mod.generateWAMessageFromContent || mod.Utils?.generateWAMessageFromContent;
       normalizeMessageContent = mod.normalizeMessageContent || mod.Utils?.normalizeMessageContent;
       isJidGroup = mod.isJidGroup || mod.WABinary?.isJidGroup;
       generateMessageIDV2 = mod.generateMessageIDV2 || mod.Utils?.generateMessageIDV2 || mod.generateMessageID || mod.Utils?.generateMessageID;
-      relayMessage = sock.relayMessage; // provided by socket instance
+      // relayMessage is provided by sock instance, keep assignment outside
+      relayMessage = sock.relayMessage;
       if (generateWAMessageFromContent && normalizeMessageContent && isJidGroup && relayMessage) {
         loaded = true;
       }
-    } catch (_) { /* try next */ }
+    } catch (e) {
+      // try next candidate
+    }
   }
+
   if (!loaded) {
     throw new InteractiveValidationError('Missing baileys internals', {
       context: 'sendInteractiveMessage.dynamicImport',
@@ -693,17 +558,15 @@ export async function sendInteractiveMessage(sock, jid, content, options = {}) {
     });
   }
 
-  // Step 3: Build the WAMessage manually.
   const userJid = sock.authState?.creds?.me?.id || sock.user?.id;
   const fullMsg = generateWAMessageFromContent(jid, convertedContent, {
     logger: sock.logger,
     userJid,
-    messageId: generateMessageIDV2(userJid),
+    messageId: (typeof generateMessageIDV2 === 'function') ? generateMessageIDV2(userJid) : undefined,
     timestamp: new Date(),
     ...options
   });
 
-  // Step 4: Inspect content to decide which additionalNodes to attach.
   const normalizedContent = normalizeMessageContent(fullMsg.message);
   const buttonType = getButtonType(normalizedContent);
   let additionalNodes = [...(options.additionalNodes || [])];
@@ -711,11 +574,9 @@ export async function sendInteractiveMessage(sock, jid, content, options = {}) {
     const buttonsNode = getButtonArgs(normalizedContent);
     const isPrivate = !isJidGroup(jid);
     additionalNodes.push(buttonsNode);
-    // Private chats require a bot node for interactive functionality.
     if (isPrivate) {
       additionalNodes.push({ tag: 'bot', attrs: { biz_bot: '1' } });
     }
-    // Useful diagnostic log (keep concise to avoid leaking full content).
     console.log('Interactive send: ', {
       type: buttonType,
       nodes: additionalNodes.map(n => ({ tag: n.tag, attrs: n.attrs })),
@@ -723,7 +584,6 @@ export async function sendInteractiveMessage(sock, jid, content, options = {}) {
     });
   }
 
-  // Step 5: Relay with injected nodes.
   await relayMessage(jid, fullMsg.message, {
     messageId: fullMsg.key.id,
     useCachedGroupMetadata: options.useCachedGroupMetadata,
@@ -732,12 +592,11 @@ export async function sendInteractiveMessage(sock, jid, content, options = {}) {
     additionalNodes
   });
 
-  // Step 6 (optional): Emit to local event stream so client consumers receive it immediately.
-  // Disable for group messages to prevent duplicate message processing
   const isPrivateChat = !isJidGroup(jid);
   if (sock.config?.emitOwnEvents && isPrivateChat) {
     process.nextTick(() => {
       if (sock.processingMutex?.mutex && sock.upsertMessage) {
+        // keep same mutex behavior as original
         sock.processingMutex.mutex(() => sock.upsertMessage(fullMsg, 'append'));
       }
     });
@@ -747,33 +606,14 @@ export async function sendInteractiveMessage(sock, jid, content, options = {}) {
 }
 
 /**
- * Simplified button sending function (template functionality removed as requested)
- * Uses the enhanced sendInteractiveMessage function that bypasses WhiskeySockets' sendMessage
+ * Public convenience wrapper for the most common quick-reply use case.
  */
-/**
- * Public convenience wrapper for the most common quick‑reply use case.
- * Accepts a simplified data object and dispatches a properly formatted
- * interactive native flow message. Templates / advanced flows intentionally
- * omitted for clarity.
- *
- * @param {object} sock Active socket instance (from WhiskeySockets connect).
- * @param {string} jid Destination chat JID.
- * @param {object} [data] High level authoring fields.
- * @param {string} [data.text] Primary body text.
- * @param {string} [data.footer] Footer text.
- * @param {string} [data.title] Header title (if provided becomes header title).
- * @param {string} [data.subtitle] Alternate header source if title absent.
- * @param {Array<object>} [data.buttons] Array of button descriptors (see buildInteractiveButtons docs).
- * @param {object} [options] Pass-through relay/send options.
- * @returns {Promise<object>} Resulting WAMessage.
- */
-async function sendInteractiveButtonsBasic(sock, jid, data = {}, options = {}) {
+export async function sendInteractiveButtonsBasic(sock, jid, data = {}, options = {}) {
   if (!sock) {
-  throw new InteractiveValidationError('Socket is required', { context: 'sendButtons' });
+    throw new InteractiveValidationError('Socket is required', { context: 'sendButtons' });
   }
 
   const { text = '', footer = '', title, subtitle, buttons = [] } = data;
-  // Strict payload validation for sendButtons format.
   const strict = validateSendButtonsPayload({ text, buttons, title, subtitle, footer });
   if (!strict.valid) {
     throw new InteractiveValidationError('Buttons payload invalid', {
@@ -784,7 +624,7 @@ async function sendInteractiveButtonsBasic(sock, jid, data = {}, options = {}) {
     });
   }
   if (strict.warnings.length) console.warn('sendButtons warnings:', strict.warnings);
-  // Validate authoring buttons early to provide clearer feedback.
+
   const { errors, warnings, cleaned } = validateAuthoringButtons(buttons);
   if (errors.length) {
     throw new InteractiveValidationError('Authoring button objects invalid', {
@@ -799,7 +639,6 @@ async function sendInteractiveButtonsBasic(sock, jid, data = {}, options = {}) {
   }
   const interactiveButtons = buildInteractiveButtons(cleaned);
 
-  // Authoring payload (transformed later by convertToInteractiveMessage).
   const payload = { text, footer, interactiveButtons };
   if (title) payload.title = title;
   if (subtitle) payload.subtitle = subtitle;
@@ -807,3 +646,16 @@ async function sendInteractiveButtonsBasic(sock, jid, data = {}, options = {}) {
   return sendInteractiveMessage(sock, jid, payload, options);
 }
 
+// Named exports (already exported via `export` keywords above for functions/classes).
+// Additional backward compatibility helper to emulate original CommonJS export shape:
+export default {
+  sendButtons: sendInteractiveButtonsBasic,
+  sendInteractiveMessage,
+  getButtonType,
+  getButtonArgs,
+  InteractiveValidationError,
+  validateAuthoringButtons,
+  validateInteractiveMessageContent,
+  validateSendButtonsPayload,
+  validateSendInteractiveMessagePayload
+};
