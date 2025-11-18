@@ -44,7 +44,7 @@
  * @param {Array<object>} [buttons=[]] Input raw buttons.
  * @returns {Array<object>} Array where each item has at minimum { name, buttonParamsJson }.
  */
-function buildInteractiveButtons(buttons = []) {
+export function buildInteractiveButtons(buttons = []) {
   return buttons.map((b, i) => {
     // 1. Already full shape (trust caller)
     if (b && b.name && b.buttonParamsJson) return b;
@@ -91,7 +91,7 @@ function buildInteractiveButtons(buttons = []) {
  * @param {Array<object>} buttons Raw user supplied buttons value.
  * @returns {{errors: string[], warnings: string[], valid: boolean, cleaned: Array<object>}}
  */
-function validateAuthoringButtons(buttons) {
+export function validateAuthoringButtons(buttons) {
   const errors = [];
   const warnings = [];
   if (buttons == null) {
@@ -171,7 +171,7 @@ function validateAuthoringButtons(buttons) {
  * surface actionable feedback to end users / logs. The message property remains
  * concise while detailed arrays are attached to the instance and serializable via toJSON.
  */
-class InteractiveValidationError extends Error {
+export class InteractiveValidationError extends Error {
   /**
    * @param {string} message High level summary.
    * @param {{context?: string, errors?: string[], warnings?: string[], example?: any}} meta
@@ -267,7 +267,7 @@ const REQUIRED_FIELDS_MAP = {
   quick_reply: ['display_text', 'id']
 };
 
-function parseButtonParams(name, buttonParamsJson, errors, warnings, index) {
+export function parseButtonParams(name, buttonParamsJson, errors, warnings, index) {
   let parsed;
   try {
     parsed = JSON.parse(buttonParamsJson);
@@ -302,7 +302,7 @@ function parseButtonParams(name, buttonParamsJson, errors, warnings, index) {
  *   1. Legacy quick reply: { id, text }
  *   2. Named buttons: name in SEND_BUTTONS_ALLOWED_COMPLEX with valid buttonParamsJson & required fields
  */
-function validateSendButtonsPayload(data) {
+export function validateSendButtonsPayload(data) {
   const errors = [];
   const warnings = [];
   if (!data || typeof data !== 'object') {
@@ -348,7 +348,7 @@ function validateSendButtonsPayload(data) {
  * Strict validator for sendInteractiveMessage authoring payload (before conversion).
  * Expected: { text: string, interactiveButtons: [ { name, buttonParamsJson } ... ], optional title/subtitle/footer }
  */
-function validateSendInteractiveMessagePayload(data) {
+export function validateSendInteractiveMessagePayload(data) {
   const errors = [];
   const warnings = [];
   if (!data || typeof data !== 'object') {
@@ -391,7 +391,7 @@ function validateSendInteractiveMessagePayload(data) {
  * @param {object} content Converted content (after optional convertToInteractiveMessage call).
  * @returns {{errors: string[], warnings: string[], valid: boolean}}
  */
-function validateInteractiveMessageContent(content) {
+export function validateInteractiveMessageContent(content) {
   const errors = [];
   const warnings = [];
   if (!content || typeof content !== 'object') {
@@ -445,7 +445,7 @@ function validateInteractiveMessageContent(content) {
  * @param {object} message A message content object (part of WAMessage.message).
  * @returns {'list'|'buttons'|'native_flow'|null} Type identifier or null if not interactive.
  */
-function getButtonType(message) {
+export function getButtonType(message) {
   if (message.listMessage) {
     return 'list';
   } else if (message.buttonsMessage) {
@@ -471,7 +471,7 @@ function getButtonType(message) {
  * @param {object} message Normalized message content (after Baileys normalization).
  * @returns {object} A node with shape { tag, attrs, [content] } to inject into additionalNodes.
  */
-function getButtonArgs(message) {
+export function getButtonArgs(message) {
   const nativeFlow = message.interactiveMessage?.nativeFlowMessage;
   const firstButtonName = nativeFlow?.buttons?.[0]?.name;
   // Button names having dedicated specialized flow nodes.
@@ -567,7 +567,7 @@ function getButtonArgs(message) {
  * @param {object} content High level authoring content.
  * @returns {object} New content object ready for generateWAMessageFromContent.
  */
-function convertToInteractiveMessage(content) {
+export function convertToInteractiveMessage(content) {
   if (content.interactiveButtons && content.interactiveButtons.length > 0) {
     // Build nativeFlowMessage.buttons array (already normalized earlier).
     const interactiveMessage = {
@@ -628,7 +628,7 @@ function convertToInteractiveMessage(content) {
  * @returns {Promise<object>} The constructed full WAMessage object (same shape as sendMessage would resolve to).
  * @throws {Error} If required WhiskeySockets internals are unavailable.
  */
-async function sendInteractiveMessage(sock, jid, content, options = {}) {
+export async function sendInteractiveMessage(sock, jid, content, options = {}) {
   if (!sock) {
   throw new InteractiveValidationError('Socket is required', { context: 'sendInteractiveMessage' });
   }
@@ -807,15 +807,3 @@ async function sendInteractiveButtonsBasic(sock, jid, data = {}, options = {}) {
   return sendInteractiveMessage(sock, jid, payload, options);
 }
 
-module.exports = { 
-  sendButtons: sendInteractiveButtonsBasic,
-  sendInteractiveMessage,
-  getButtonType,
-  getButtonArgs,
-  InteractiveValidationError,
-  // Export validators for external pre-flight usage / testing.
-  validateAuthoringButtons,
-  validateInteractiveMessageContent,
-  validateSendButtonsPayload,
-  validateSendInteractiveMessagePayload
-};
