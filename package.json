@@ -11,6 +11,7 @@
   "author": "mehebub648",
   "type": "module",
   "main": "export.js",
+  "exports": "./export.js",
   "repository": {
     "type": "git",
     "url": "https://github.com/mehebub648/Scratchive-Module-BaileysHelper.git"
