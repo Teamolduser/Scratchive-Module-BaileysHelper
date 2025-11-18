@@ -9,7 +9,7 @@
   ],
   "license": "ISC",
   "author": "mehebub648",
-  "type": "commonjs",
+  "type": "module",
   "main": "export.js",
   "repository": {
     "type": "git",
