@@ -1,17 +1,3 @@
-/**
- * ESM-ready buttons wrapper (refined)
- * - dynamic import via `await import(pkg)` (ESM)
- * - export missing functions
- * - default export for CJS-compat fallback
- */
-
-/* ...keep header docs from your file... */
-
-// (All helper functions / validators remain identical to what you already wrote above)
-// I'm including the full corrected file here with only the minimal necessary changes.
-
-/* ---------- helpers / validators / classes (unchanged) ---------- */
-
 export function buildInteractiveButtons(buttons = []) {
   return buttons.map((b, i) => {
     if (b && b.name && b.buttonParamsJson) return b;
@@ -72,9 +58,6 @@ export function validateAuthoringButtons(buttons) {
       return b;
     }
     if (b.id || b.text || b.displayText) {
-      if (!(b.id || b.text || b.displayText)) {
-        errors.push(`button[${idx}] legacy shape missing id or text/displayText`);
-      }
       return b;
     }
     if (b.buttonId && b.buttonText && typeof b.buttonText === 'object' && b.buttonText.displayText) {
@@ -381,9 +364,8 @@ export function getButtonArgs(message) {
       attrs: {},
       content: [{ tag: 'list', attrs: { v: '2', type: 'product_list' } }]
     };
-  } else {
-    return { tag: 'biz', attrs: {} };
   }
+  return { tag: 'biz', attrs: {} };
 }
 
 export function convertToInteractiveMessage(content) {
@@ -414,8 +396,6 @@ export function convertToInteractiveMessage(content) {
   }
   return content;
 }
-
-/* ---------- core send functions (fixed for ESM dynamic import) ---------- */
 
 export async function sendInteractiveMessage(sock, jid, content, options = {}) {
   if (!sock) {
@@ -450,7 +430,6 @@ export async function sendInteractiveMessage(sock, jid, content, options = {}) {
     console.warn('Interactive content warnings:', contentWarnings);
   }
 
-  // ESM dynamic import loop
   const candidatePkgs = ['baileys', '@whiskeysockets/baileys', '@adiwajshing/baileys'];
   let generateWAMessageFromContent, normalizeMessageContent, isJidGroup, generateMessageIDV2;
   let relayMessage;
@@ -459,7 +438,6 @@ export async function sendInteractiveMessage(sock, jid, content, options = {}) {
   for (const pkg of candidatePkgs) {
     if (loaded) break;
     try {
-      // dynamic import (works in ESM)
       const ns = await import(pkg);
       const mod = ns.default || ns;
       generateWAMessageFromContent = mod.generateWAMessageFromContent || mod.Utils?.generateWAMessageFromContent;
@@ -471,7 +449,7 @@ export async function sendInteractiveMessage(sock, jid, content, options = {}) {
         loaded = true;
       }
     } catch (e) {
-      // ignore and try next
+      // try next
     }
   }
 
@@ -495,7 +473,7 @@ export async function sendInteractiveMessage(sock, jid, content, options = {}) {
 
   const normalizedContent = normalizeMessageContent(fullMsg.message);
   const buttonType = getButtonType(normalizedContent);
-  let additionalNodes = [...(options.additionalNodes || [])];
+  const additionalNodes = [...(options.additionalNodes || [])];
   if (buttonType) {
     const buttonsNode = getButtonArgs(normalizedContent);
     const isPrivate = !isJidGroup(jid);
@@ -566,18 +544,4 @@ export async function sendInteractiveButtonsBasic(sock, jid, data = {}, options 
   return sendInteractiveMessage(sock, jid, payload, options);
 }
 
-/* ---------- default export (CJS compatibility object) ---------- */
-
-export {
-  sendInteractiveButtonsBasic as sendButtons,
-  sendInteractiveMessage,
-  getButtonType,
-  getButtonArgs,
-  InteractiveValidationError,
-  validateAuthoringButtons,
-  validateInteractiveMessageContent,
-  validateSendButtonsPayload,
-  validateSendInteractiveMessagePayload,
-  buildInteractiveButtons,
-  parseButtonParams,
-};
+export const sendButtons = sendInteractiveButtonsBasic;
