@@ -569,7 +569,7 @@ export async function sendInteractiveButtonsBasic(sock, jid, data = {}, options 
 /* ---------- default export (CJS compatibility object) ---------- */
 
 export {
-  sendButtons: sendInteractiveButtonsBasic,
+  sendInteractiveButtonsBasic as sendButtons,
   sendInteractiveMessage,
   getButtonType,
   getButtonArgs,
