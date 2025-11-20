@@ -580,5 +580,4 @@ export {
   validateSendInteractiveMessagePayload,
   buildInteractiveButtons,
   parseButtonParams,
-  validateSendInteractiveMessagePayload
 };
